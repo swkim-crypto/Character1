@@ -5,7 +5,7 @@
 - Anthropic Claude API로 화자 특성 추론 (나이대/성별/직업/교육수준 + 사용자 정의 질문)
 
 환경변수 (Render 대시보드에서 설정):
-  OPENAI_API_KEY     - 음성 전사용
+  GROQ_API_KEY       - 음성 전사용 (Groq Whisper, 무료 티어 있음)
   ANTHROPIC_API_KEY  - 분석용
 """
 
@@ -16,14 +16,15 @@ import httpx
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.responses import FileResponse, JSONResponse
 
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 
-OPENAI_TRANSCRIBE_URL = "https://api.openai.com/v1/audio/transcriptions"
+GROQ_TRANSCRIBE_URL = "https://api.groq.com/openai/v1/audio/transcriptions"
+GROQ_STT_MODEL = "whisper-large-v3"
 ANTHROPIC_MESSAGES_URL = "https://api.anthropic.com/v1/messages"
 ANTHROPIC_MODEL = "claude-sonnet-4-6"
 
-MAX_FILE_MB = 25  # Whisper API 파일당 제한
+MAX_FILE_MB = 25  # Groq 무료 티어 파일당 제한
 ALLOWED_EXT = {".mp3", ".m4a", ".wav", ".webm", ".mp4", ".mpga", ".mpeg", ".ogg", ".flac"}
 
 app = FastAPI(title="인터뷰 화자 분석기")
@@ -38,18 +39,18 @@ async def index():
 async def health():
     return {
         "ok": True,
-        "openai_key": bool(OPENAI_API_KEY),
+        "groq_key": bool(GROQ_API_KEY),
         "anthropic_key": bool(ANTHROPIC_API_KEY),
     }
 
 
 async def transcribe_file(client: httpx.AsyncClient, filename: str, data: bytes) -> str:
-    """OpenAI Whisper API로 오디오 파일 하나를 전사한다."""
+    """Groq Whisper API로 오디오 파일 하나를 전사한다."""
     files = {"file": (filename, data)}
-    form = {"model": "whisper-1"}
+    form = {"model": GROQ_STT_MODEL, "language": "ko"}
     resp = await client.post(
-        OPENAI_TRANSCRIBE_URL,
-        headers={"Authorization": f"Bearer {OPENAI_API_KEY}"},
+        GROQ_TRANSCRIBE_URL,
+        headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
         data=form,
         files=files,
         timeout=300,
@@ -121,10 +122,10 @@ async def analyze(
     files: list[UploadFile] = File(...),
     extra_question: str = Form(""),
 ):
-    if not OPENAI_API_KEY or not ANTHROPIC_API_KEY:
+    if not GROQ_API_KEY or not ANTHROPIC_API_KEY:
         return JSONResponse(
             status_code=500,
-            content={"error": "서버에 API 키가 설정되지 않았습니다. Render 환경변수에서 OPENAI_API_KEY와 ANTHROPIC_API_KEY를 확인하세요."},
+            content={"error": "서버에 API 키가 설정되지 않았습니다. Render 환경변수에서 GROQ_API_KEY와 ANTHROPIC_API_KEY를 확인하세요."},
         )
 
     transcripts = []
