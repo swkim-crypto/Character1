@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>인터뷰 화자 분석기</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #16211c;
+    --paper: #f4f6f5;
+    --panel: #ffffff;
+    --line: #d8ded b;
+    --line: #d8dedb;
+    --accent: #0e6e5c;       /* 딥 틸 — 분석 도구의 계기판 느낌 */
+    --accent-soft: #e3f0ec;
+    --warn: #b3541e;
+    --muted: #5d6b65;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "IBM Plex Sans KR", sans-serif;
+    background: var(--paper);
+    color: var(--ink);
+    min-height: 100vh;
+  }
+  .mono { font-family: "IBM Plex Mono", monospace; }
+
+  header {
+    border-bottom: 2px solid var(--ink);
+    background: var(--panel);
+    padding: 28px 24px 22px;
+  }
+  .wrap { max-width: 1060px; margin: 0 auto; }
+  header .eyebrow {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    color: var(--accent);
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  header h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.01em; }
+  header p { color: var(--muted); margin-top: 6px; font-size: 14px; }
+
+  main { display: grid; grid-template-columns: 400px 1fr; gap: 24px; padding: 28px 24px 60px; }
+  @media (max-width: 860px) { main { grid-template-columns: 1fr; } }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 22px;
+  }
+  .card h2 {
+    font-size: 13px;
+    font-family: "IBM Plex Mono", monospace;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 14px;
+  }
+
+  .dropzone {
+    border: 1.5px dashed var(--line);
+    border-radius: var(--radius);
+    padding: 30px 16px;
+    text-align: center;
+    color: var(--muted);
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+    font-size: 14px;
+  }
+  .dropzone.drag { border-color: var(--accent); background: var(--accent-soft); }
+  .dropzone strong { color: var(--accent); }
+  #fileInput { display: none; }
+
+  ul.filelist { list-style: none; margin-top: 12px; }
+  ul.filelist li {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    margin-bottom: 6px;
+    font-size: 13px;
+    background: #fbfcfc;
+  }
+  ul.filelist .size { color: var(--muted); font-family: "IBM Plex Mono", monospace; font-size: 12px; }
+  ul.filelist button {
+    background: none; border: none; color: var(--warn);
+    cursor: pointer; font-size: 15px; line-height: 1; padding: 2px 4px;
+  }
+
+  label.qlabel { display: block; font-size: 13px; font-weight: 600; margin: 18px 0 6px; }
+  textarea {
+    width: 100%; min-height: 84px; resize: vertical;
+    border: 1px solid var(--line); border-radius: 6px;
+    padding: 10px 12px; font: inherit; font-size: 14px;
+    background: #fbfcfc;
+  }
+  textarea:focus, .dropzone:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  button.run {
+    margin-top: 18px; width: 100%;
+    background: var(--accent); color: #fff;
+    border: none; border-radius: 6px;
+    padding: 13px; font: inherit; font-size: 15px; font-weight: 600;
+    cursor: pointer;
+  }
+  button.run:disabled { background: #9db5ae; cursor: not-allowed; }
+  button.run:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+  .note { font-size: 12px; color: var(--muted); margin-top: 12px; line-height: 1.5; }
+
+  .status {
+    display: none; margin-top: 14px; font-size: 13px;
+    font-family: "IBM Plex Mono", monospace; color: var(--accent);
+  }
+  .status.show { display: block; }
+  .status .dot { animation: blink 1.2s infinite; }
+  @keyframes blink { 50% { opacity: 0.2; } }
+  @media (prefers-reduced-motion: reduce) { .status .dot { animation: none; } }
+
+  .error {
+    display: none; margin-top: 14px; padding: 10px 12px;
+    border: 1px solid var(--warn); border-radius: 6px;
+    color: var(--warn); font-size: 13px; background: #fdf4ee;
+  }
+  .error.show { display: block; }
+
+  /* 결과 */
+  #results .placeholder { color: var(--muted); font-size: 14px; padding: 30px 0; text-align: center; }
+
+  .attr {
+    border: 1px solid var(--line); border-radius: 8px;
+    padding: 14px 16px; margin-bottom: 10px;
+  }
+  .attr .row { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+  .attr .name { font-family: "IBM Plex Mono", monospace; font-size: 12px; color: var(--muted); letter-spacing: 0.06em; }
+  .attr .estimate { font-size: 17px; font-weight: 700; margin-top: 2px; }
+  .attr .evidence { font-size: 13px; color: var(--muted); margin-top: 8px; line-height: 1.55; }
+
+  .conf { text-align: right; min-width: 76px; }
+  .conf .label { font-size: 11px; font-family: "IBM Plex Mono", monospace; color: var(--muted); }
+  .conf .bars { display: flex; gap: 3px; justify-content: flex-end; margin-top: 4px; }
+  .conf .bar { width: 16px; height: 6px; border-radius: 2px; background: var(--line); }
+  .conf .bar.on { background: var(--accent); }
+
+  .block { margin-top: 20px; }
+  .block h3 {
+    font-size: 13px; font-family: "IBM Plex Mono", monospace;
+    letter-spacing: 0.1em; color: var(--muted); text-transform: uppercase; margin-bottom: 8px;
+  }
+  .block p { font-size: 14px; line-height: 1.65; }
+
+  details.tx { margin-top: 10px; border: 1px solid var(--line); border-radius: 6px; }
+  details.tx summary {
+    cursor: pointer; padding: 10px 12px; font-size: 13px; font-weight: 600;
+  }
+  details.tx pre {
+    white-space: pre-wrap; font-family: inherit; font-size: 13px;
+    color: var(--muted); padding: 0 12px 12px; line-height: 1.6;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <div class="eyebrow">Speaker Profiling · STT + LLM</div>
+    <h1>인터뷰 화자 분석기</h1>
+    <p>녹음파일을 올리면 전사한 뒤, 발화 내용을 근거로 화자의 나이대·성별·직업·교육수준을 추정합니다.</p>
+  </div>
+</header>
+
+<main class="wrap">
+  <!-- 입력 패널 -->
+  <section class="card">
+    <h2>입력</h2>
+
+    <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="녹음파일 선택">
+      여기에 파일을 끌어다 놓거나 <strong>클릭해서 선택</strong><br>
+      <span class="mono" style="font-size:12px">mp3 · m4a · wav · webm · ogg · flac (파일당 25MB)</span>
+    </div>
+    <input type="file" id="fileInput" multiple accept=".mp3,.m4a,.wav,.webm,.mp4,.ogg,.flac,.mpeg,.mpga">
+    <ul class="filelist" id="filelist"></ul>
+
+    <label class="qlabel" for="extraQ">추가로 알고 싶은 내용 (선택)</label>
+    <textarea id="extraQ" placeholder="예: 이 사람의 소비 성향은? 리더십 스타일은? 어떤 지역 출신으로 보이는지?"></textarea>
+
+    <button class="run" id="runBtn" disabled>분석 시작</button>
+
+    <div class="status" id="status"><span class="dot">●</span> <span id="statusText">처리 중…</span></div>
+    <div class="error" id="error"></div>
+
+    <p class="note">
+      분석 결과는 발화 텍스트 기반의 <b>추정</b>이며 부정확할 수 있습니다.
+      채용·평가 등 개인에게 영향을 주는 결정에 단독 근거로 사용하지 마세요.
+      녹음 대상자의 동의를 확인한 파일만 업로드해 주세요.
+    </p>
+  </section>
+
+  <!-- 결과 패널 -->
+  <section class="card" id="results">
+    <h2>분석 결과</h2>
+    <div class="placeholder" id="placeholder">파일을 업로드하고 분석을 시작하면 결과가 여기에 표시됩니다.</div>
+    <div id="resultBody" style="display:none">
+      <div id="attrs"></div>
+      <div class="block" id="customBlock" style="display:none">
+        <h3>추가 질문 분석</h3>
+        <p id="customText"></p>
+      </div>
+      <div class="block">
+        <h3>종합 프로필</h3>
+        <p id="summaryText"></p>
+      </div>
+      <div class="block">
+        <h3>전사문</h3>
+        <div id="txList"></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const filelist = document.getElementById('filelist');
+const runBtn = document.getElementById('runBtn');
+const statusEl = document.getElementById('status');
+const statusText = document.getElementById('statusText');
+const errorEl = document.getElementById('error');
+
+let files = [];
+
+function fmtSize(b) {
+  return b > 1024*1024 ? (b/1024/1024).toFixed(1) + ' MB' : (b/1024).toFixed(0) + ' KB';
+}
+
+function renderFiles() {
+  filelist.innerHTML = '';
+  files.forEach((f, i) => {
+    const li = document.createElement('li');
+    const name = document.createElement('span');
+    name.textContent = f.name;
+    const right = document.createElement('span');
+    const size = document.createElement('span');
+    size.className = 'size';
+    size.textContent = fmtSize(f.size) + ' ';
+    const del = document.createElement('button');
+    del.textContent = '✕';
+    del.setAttribute('aria-label', f.name + ' 제거');
+    del.onclick = () => { files.splice(i, 1); renderFiles(); };
+    right.append(size, del);
+    li.append(name, right);
+    filelist.append(li);
+  });
+  runBtn.disabled = files.length === 0;
+}
+
+function addFiles(list) {
+  for (const f of list) {
+    if (f.size > 25*1024*1024) { showError(`'${f.name}'은(는) 25MB를 초과해 제외했습니다.`); continue; }
+    if (!files.some(x => x.name === f.name && x.size === f.size)) files.push(f);
+  }
+  hideErrorSoon();
+  renderFiles();
+}
+
+dropzone.onclick = () => fileInput.click();
+dropzone.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); } };
+fileInput.onchange = () => { addFiles(fileInput.files); fileInput.value = ''; };
+['dragenter','dragover'].forEach(ev => dropzone.addEventListener(ev, e => { e.preventDefault(); dropzone.classList.add('drag'); }));
+['dragleave','drop'].forEach(ev => dropzone.addEventListener(ev, e => { e.preventDefault(); dropzone.classList.remove('drag'); }));
+dropzone.addEventListener('drop', e => addFiles(e.dataTransfer.files));
+
+function showError(msg) { errorEl.textContent = msg; errorEl.classList.add('show'); }
+function hideError() { errorEl.classList.remove('show'); }
+let errTimer;
+function hideErrorSoon() { clearTimeout(errTimer); errTimer = setTimeout(hideError, 5000); }
+
+const CONF_MAP = { '높음': 3, '중간': 2, '낮음': 1 };
+
+function renderResult(data) {
+  document.getElementById('placeholder').style.display = 'none';
+  document.getElementById('resultBody').style.display = 'block';
+
+  const attrs = document.getElementById('attrs');
+  attrs.innerHTML = '';
+  (data.analysis.attributes || []).forEach(a => {
+    const level = CONF_MAP[a.confidence] || 1;
+    const div = document.createElement('div');
+    div.className = 'attr';
+    div.innerHTML = `
+      <div class="row">
+        <div>
+          <div class="name">${a.name}</div>
+          <div class="estimate"></div>
+        </div>
+        <div class="conf">
+          <div class="label">확신도 · ${a.confidence || '-'}</div>
+          <div class="bars">
+            <span class="bar ${level>=1?'on':''}"></span>
+            <span class="bar ${level>=2?'on':''}"></span>
+            <span class="bar ${level>=3?'on':''}"></span>
+          </div>
+        </div>
+      </div>
+      <div class="evidence"></div>`;
+    div.querySelector('.estimate').textContent = a.estimate || '-';
+    div.querySelector('.evidence').textContent = a.evidence || '';
+    attrs.append(div);
+  });
+
+  const custom = (data.analysis.custom_analysis || '').trim();
+  document.getElementById('customBlock').style.display = custom ? 'block' : 'none';
+  document.getElementById('customText').textContent = custom;
+  document.getElementById('summaryText').textContent = data.analysis.summary || '';
+
+  const txList = document.getElementById('txList');
+  txList.innerHTML = '';
+  (data.transcripts || []).forEach(t => {
+    const d = document.createElement('details');
+    d.className = 'tx';
+    const s = document.createElement('summary');
+    s.textContent = t.filename;
+    const pre = document.createElement('pre');
+    pre.textContent = t.text;
+    d.append(s, pre);
+    txList.append(d);
+  });
+}
+
+runBtn.onclick = async () => {
+  hideError();
+  runBtn.disabled = true;
+  statusEl.classList.add('show');
+  statusText.textContent = `${files.length}개 파일 전사 및 분석 중… (파일 길이에 따라 수 분 걸릴 수 있습니다)`;
+
+  const fd = new FormData();
+  files.forEach(f => fd.append('files', f));
+  fd.append('extra_question', document.getElementById('extraQ').value);
+
+  try {
+    const resp = await fetch('/analyze', { method: 'POST', body: fd });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || `서버 오류 (${resp.status})`);
+    renderResult(data);
+  } catch (e) {
+    showError(e.message);
+  } finally {
+    statusEl.classList.remove('show');
+    runBtn.disabled = files.length === 0;
+  }
+};
+</script>
+</body>
+</html>
